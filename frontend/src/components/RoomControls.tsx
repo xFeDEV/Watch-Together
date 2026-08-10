@@ -41,7 +41,7 @@ export const RoomControls: React.FC<RoomControlsProps> = ({
             <User className="w-5 h-5 text-brand-coral" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">Anfitrión (Host)</p>
+            <p className="text-sm font-semibold text-white">Federico 👑</p>
             <p className="text-xs text-emerald-400 font-medium">
               {hostPeer ? '🟢 Conectado' : '🟡 Esperando...'}
             </p>
@@ -53,13 +53,13 @@ export const RoomControls: React.FC<RoomControlsProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center">
-            <User className="w-5 h-5 text-blue-400" />
+          <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center">
+            <User className="w-5 h-5 text-rose-400" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">Invitado (Guest)</p>
+            <p className="text-sm font-semibold text-white">Cris ❤️</p>
             <p className="text-xs text-emerald-400 font-medium">
-              {guestPeer ? '🟢 Conectado' : '🟡 Esperando...'}
+              {guestPeer ? '🟢 Conectada' : '🟡 Esperando...'}
             </p>
           </div>
         </div>
@@ -93,7 +93,7 @@ export const RoomControls: React.FC<RoomControlsProps> = ({
           </label>
         ) : (
           <div className="text-xs text-gray-400 italic text-center sm:text-left">
-            El anfitrión controla la selección del video local.
+            Federico controla la selección del video local.
           </div>
         )}
 

@@ -59,11 +59,14 @@ export const Home: React.FC = () => {
             </div>
 
             <div>
+              <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium mb-3">
+                <span>✨ Creado por Federico · Pensado 100% para Cris ❤️</span>
+              </div>
               <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
                 🍿 Watch Together
               </h2>
               <p className="text-base text-gray-400 mt-2">
-                Mira videos juntos con sincronización P2P directa entre navegadores.
+                Mira películas y series juntos con sincronización P2P directa entre navegadores.
               </p>
             </div>
           </div>

@@ -90,9 +90,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <Film className="w-8 h-8 text-brand-coral" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-white">Selecciona un archivo multimedia</h3>
+            <h3 className="text-xl font-bold text-white">Selecciona una película o video</h3>
             <p className="text-sm text-gray-400 max-w-sm mt-1">
-              Selecciona un video local en tu PC para comenzar a reproducirlo y transmitirlo P2P al invitado.
+              Selecciona un video local en tu PC para comenzar a reproducirlo y transmitirlo P2P a Cris.
             </p>
           </div>
         </div>
@@ -100,13 +100,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       {role === 'guest' && !remoteStream && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-dark-900/90 text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center animate-pulse">
-            <Film className="w-8 h-8 text-blue-400" />
+          <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center animate-pulse">
+            <Film className="w-8 h-8 text-rose-400" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-white">Esperando transmisión del Host...</h3>
+            <h3 className="text-xl font-bold text-white">Esperando transmisión de Federico...</h3>
             <p className="text-sm text-gray-400 max-w-sm mt-1">
-              El anfitrión aún no ha seleccionado o transmitido un video por WebRTC.
+              Federico aún no ha seleccionado o transmitido un video por WebRTC.
             </p>
           </div>
         </div>

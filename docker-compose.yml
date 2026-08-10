@@ -9,6 +9,10 @@ services:
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
+      - JELLYFIN_URL=http://jellyfin:8096
+      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
+    volumes:
+      - ./data/watch-together:/media/watch-together
     networks:
       - watchtogether_net
 
@@ -33,6 +37,26 @@ services:
       - "traefik.http.services.watchtogether-svc.loadbalancer.server.port=80"
     depends_on:
       - backend
+    networks:
+      - watchtogether_net
+      - proxy_network
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: watchtogether-jellyfin
+    restart: unless-stopped
+    volumes:
+      - ./data/jellyfin/config:/config
+      - ./data/jellyfin/cache:/cache
+      - ./data/watch-together:/media/watch-together
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy_network"
+      - "traefik.http.routers.jellyfin.rule=Host(`${JELLYFIN_DOMAIN:-jellyfin.feexel.tech}`)"
+      - "traefik.http.routers.jellyfin.entrypoints=websecure"
+      - "traefik.http.routers.jellyfin.service=jellyfin-svc"
+      - "traefik.http.routers.jellyfin.tls.certresolver=${CERT_RESOLVER:-myresolver}"
+      - "traefik.http.services.jellyfin-svc.loadbalancer.server.port=8096"
     networks:
       - watchtogether_net
       - proxy_network

@@ -1,17 +1,21 @@
 import time
 import json
 import logging
-from typing import Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, status
+import asyncio
+from typing import Optional, List
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.rooms import room_manager
+from app.upload import router as upload_router
+from app.cleanup import get_all_temporary_media, delete_media_by_id, run_expiration_check
+from app.jellyfin import get_active_sessions, JELLYFIN_URL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("watch-together")
 
-app = FastAPI(title="Watch Together P2P Signaling Server")
+app = FastAPI(title="Watch Together P2P & Jellyfin SyncPlay Manager")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,8 +25,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(upload_router)
+
 class CreateRoomResponse(BaseModel):
     room_id: str
+
+@app.on_event("startup")
+async def startup_event():
+    # Run initial expiration check on server start (handles server reboots)
+    asyncio.create_task(run_periodic_expiration_checks())
+
+async def run_periodic_expiration_checks():
+    while True:
+        try:
+            await run_expiration_check()
+        except Exception as e:
+            logger.error(f"Error in periodic expiration check: {e}")
+        await asyncio.sleep(300)  # Check every 5 minutes
 
 @app.get("/health")
 def health_check():
@@ -46,6 +65,27 @@ def get_room_info(room_id: str):
         "peer_count": len(room.peers),
         "is_full": len(room.peers) >= 2,
         "video_state": room.video_state
+    }
+
+# Temporary Media Management Endpoints
+@app.get("/api/media")
+def list_temporary_media():
+    return {"media": get_all_temporary_media()}
+
+@app.delete("/api/media/{file_id}")
+async def delete_temporary_media(file_id: str):
+    success = await delete_media_by_id(file_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Media file not found")
+    return {"status": "ok", "message": "Media deleted successfully"}
+
+@app.get("/api/jellyfin/status")
+async def jellyfin_status():
+    sessions = await get_active_sessions()
+    return {
+        "jellyfin_url": JELLYFIN_URL,
+        "active_sessions_count": len(sessions),
+        "sessions": sessions
     }
 
 @app.websocket("/ws/{room_id}")
@@ -105,7 +145,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, client_id: Opti
                 })
 
             elif msg_type in ("offer", "answer", "ice-candidate"):
-                # Forward WebRTC signaling to other peer
                 await forward_to_other_peers(room, sender_id=client_id, message={
                     "type": msg_type,
                     "sender_id": client_id,
@@ -113,7 +152,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, client_id: Opti
                 })
 
             elif msg_type in ("play", "pause", "seek", "state"):
-                # Update room video state
                 if msg_type == "play":
                     room.video_state["is_playing"] = True
                     if "current_time" in payload:
@@ -130,7 +168,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, client_id: Opti
                 
                 room.video_state["updated_at"] = time.time()
 
-                # Broadcast to other peer
                 await forward_to_other_peers(room, sender_id=client_id, message={
                     "type": msg_type,
                     "sender_id": client_id,
@@ -142,7 +179,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, client_id: Opti
                 break
 
             else:
-                # Forward unknown/custom room events (e.g. video-changed, chat, etc)
                 await forward_to_other_peers(room, sender_id=client_id, message={
                     "type": msg_type,
                     "sender_id": client_id,

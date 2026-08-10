@@ -1,124 +1,79 @@
-# 🍿 Watch Together P2P
+# 🍿 Watch Together — Jellyfin + SyncPlay + Temporary 24h Media
 
-Aplicación web privada para ver videos y archivos multimedia de forma sincronizada punto a punto (**P2P**) entre dos participantes mediante **WebRTC** y **WebSockets**.
-
-El archivo de video **NO se sube ni se almacena en el servidor backend (VPS)**. El equipo del anfitrión (*Host*) transmite el stream multimedia directamente al navegador invitado (*Guest*) mediante WebRTC.
+Aplicación privada para subir películas/videos temporales y verlos en sincronía entre **Federico** y **Cris** mediante **Jellyfin + SyncPlay** o reproducción **P2P en directo**.
 
 ---
 
-## 🏗️ Arquitectura
+## 🚀 Inicio Rápido
 
-```text
-                 FastAPI (Signaling only)
-                            │
-               ┌────────────┴────────────┐
-               │                         │
-           Browser A                 Browser B
-          (Anfitrión)               (Invitado)
-               │                         ▲
-               │      WebRTC Stream      │
-               └─────────────────────────┘
-                       P2P Direct
-```
+### 1. Iniciar servicios en Docker
 
-* **Frontend**: React + TypeScript + Vite + Tailwind CSS + Native WebRTC (`RTCPeerConnection`, `captureStream`).
-* **Backend**: Python + FastAPI + WebSockets (Signaling Server, gestión de salas en memoria, límite de 2 personas por sala).
-* **Infraestructura**: Docker + Docker Compose + STUN/TURN fallback.
-
----
-
-## ⚙️ Decisión Técnica: Transmisión P2P Local (`captureStream`)
-
-Para evitar cargar el archivo completo en la memoria RAM o subirlo al VPS:
-1. El **Host** selecciona un archivo local (`<input type="file">`).
-2. Se genera un Blob URL local y se carga en el elemento de video HTML5.
-3. Se extraen las pistas decodificadas en tiempo real mediante `HTMLMediaElement.captureStream()`.
-4. Las pistas de audio y video se transmiten sobre la conexión WebRTC P2P (`RTCPeerConnection`).
-5. El **Guest** recibe el `MediaStream` y lo enlaza directamente al elemento de video (`video.srcObject`).
-
-### Ventajas:
-* **0 MB de almacenamiento** en servidor.
-* **Bajo consumo de RAM (~50-150 MB)** incluso con películas de gran tamaño (4 GB a 50 GB+).
-* Decodificación y transmisión fluida adaptativa.
-
----
-
-## 🚀 Guía de Ejecución
-
-### Opción A: Desarrollo Local Nativo (Sin Docker)
-
-#### 1. Backend (FastAPI)
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-El backend estará disponible en `http://localhost:8000`.
-
-#### 2. Frontend (React + Vite)
-```bash
-cd frontend
-npm install
-npm run dev
-```
-La aplicación web estará disponible en `http://localhost:5173`.
-
----
-
-### Opción B: Despliegue con Docker Compose
-
-1. Crear archivo `.env` a partir de `.env.example`:
-```bash
-cp .env.example .env
+docker compose up -d --build
 ```
 
-2. Iniciar servicios en segundo plano:
-```bash
-docker compose up -d
-```
+### 2. Detener servicios
 
-3. Acceder a la aplicación:
-   * Frontend: `http://localhost:5173`
-   * Backend Health: `http://localhost:8000/health`
-
-4. Detener servicios:
 ```bash
 docker compose down
 ```
 
 ---
 
-## 🔑 Configuración de STUN / TURN
+## ⚙️ Configuración y Variables de Entorno (`.env`)
 
-Por defecto, la aplicación utiliza el servidor STUN público de Google:
-`stun:stun.l.google.com:19302`
-
-Si ambos participantes se encuentran detrás de routers NAT simétricos o cortafuegos estrictos donde una conexión P2P directa no sea posible, puedes configurar tu propio servidor **TURN** en el archivo `.env`:
+Crea o edita el archivo `.env` en la raíz del proyecto:
 
 ```env
-VITE_STUN_SERVER=stun:stun.l.google.com:19302
-VITE_TURN_SERVER=turn:tu-servidor-turn.com:3478
-VITE_TURN_USERNAME=tu_usuario
-VITE_TURN_PASSWORD=tu_password
+DOMAIN=cine.feexel.tech
+JELLYFIN_DOMAIN=jellyfin.feexel.tech
+CERT_RESOLVER=myresolver
+
+# Clave API generada en Jellyfin (Panel Admin -> API Keys)
+JELLYFIN_API_KEY=tu_clave_api_aqui
 ```
+
+> **DNS**: Recuerda apuntar los registros A de DNS de `cine.feexel.tech` y `jellyfin.feexel.tech` a la IP de tu VPS.
 
 ---
 
-## 🧪 Pruebas Automatizadas
+## 🍿 Configuración Inicial de Jellyfin (Primera vez)
 
-El backend incluye una suite de pruebas con `pytest` para verificar endpoints y comportamiento del WebSocket signaling:
-
-```bash
-cd backend
-./venv/bin/pytest tests/
-```
+1. Ingresa a `https://jellyfin.feexel.tech`.
+2. Completa el asistente inicial creando la cuenta de administración.
+3. **Crear Biblioteca de Películas Temporales**:
+   - Ve a **Panel de Control (Dashboard) -> Bibliotecas**.
+   - Haz clic en **Añadir Biblioteca**.
+   - Tipo de contenido: **Películas**.
+   - Nombre: `Películas Temporales`.
+   - Carpeta: `/media/watch-together`.
+4. **Crear Usuarios**:
+   - Crea los usuarios **Federico** y **Cris**.
+   - En sus perfiles de usuario (Pestaña *Reproducción*), se recomienda deshabilitar *Permitir la transcodificación de vídeo* para garantizar reproducción fluida por **Direct Play** sin saturar la CPU del VPS.
+5. **Generar API Key para Automatización**:
+   - Ve a **Panel de Control -> Claves API**.
+   - Haz clic en **Añadir Clave API** (Nombre: `WatchTogether`).
+   - Copia la clave generada y pégala en tu `.env` como `JELLYFIN_API_KEY`.
+   - Reinicia los contenedores: `docker compose restart backend`.
 
 ---
 
-## 🎬 Compatibilidad Multimedia
+## ⏰ Funcionamiento de los Archivos Temporales (24h)
 
-Los códecs soportados dependen de las capacidades nativas del navegador:
-* **Recomendados**: MP4 (H.264 / AAC), WebM (VP8 / VP9 / AV1).
-* En caso de seleccionar un formato no compatible (ej. ciertos archivos MKV con audio no estándar), la interfaz mostrará una alerta clara indicando la falta de compatibilidad nativa sin bloquear la aplicación.
+* **Subida en Streaming (0% RAM)**: Puedes subir películas grandes (desde 500MB hasta 20GB). El backend escribe por bloques directamente en `./data/watch-together` consumiendo <30MB de memoria RAM.
+* **Escaneo Automático**: Al terminar la subida, la app invoca la API de Jellyfin (`POST /Library/Media/Updated`), haciendo que la película aparezca en la biblioteca en **1-2 segundos**.
+* **Expiración de 24 horas**:
+  * Cada película incluye un temporizador visible (`⏳ Expira en: 18h 42m`).
+  * Una tarea de fondo revisa expiraciones cada 5 minutos y al iniciar el contenedor.
+  * **Protección de Reproducción Activa**: Si Federico o Cris están viendo la película en SyncPlay al cumplirse las 24h, el sistema detecta la sesión activa (`GET /Sessions`) y pospone la eliminación hasta que finalice la reproducción.
+
+---
+
+## 🛠️ Guía de Solución de Problemas (Troubleshooting)
+
+| Problema | Causa | Solución |
+| :--- | :--- | :--- |
+| **Jellyfin no detecta el video subido** | `JELLYFIN_API_KEY` no configurada o incorrecta. | Verifica la API Key en `.env` y comprueba la consola del contenedor `watchtogether-backend`. |
+| **Video en negro o consumo de CPU alto en VPS** | El video utiliza un códec no nativo web (ej. H.265 / MKV / AC3). | Procura subir archivos `.mp4` (H.264 / AAC) para forzar **Direct Play** (CPU <5%). |
+| **SyncPlay desincronizado** | Diferencia de latencia o conexión inestable. | En el reproductor de Jellyfin, pulsa el icono de SyncPlay (esquina superior derecha) para reacoplar el grupo. |
+| **Upload falla en archivos de >2GB** | Tiempo de espera en proxy o tamaño máximo. | Traefik procesa uploads sin límite de tamaño por defecto; asegúrate de tener espacio disponible en el disco del VPS. |

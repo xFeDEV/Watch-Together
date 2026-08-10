@@ -25,11 +25,10 @@ services:
       - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
     labels:
       - "traefik.enable=true"
+      - "traefik.http.routers.watchtogether.rule=Host(`${DOMAIN:-cine.feexel.tech}`)"
+      - "traefik.http.routers.watchtogether.entrypoints=web,websecure"
+      - "traefik.http.routers.watchtogether.tls.certresolver=${CERT_RESOLVER:-myresolver}"
       - "traefik.http.services.watchtogether.loadbalancer.server.port=80"
-      - "traefik.http.routers.watchtogether.rule=Host(`${DOMAIN:-watchtogether.feexel.tech}`)"
-      - "traefik.http.routers.watchtogether.entrypoints=websecure"
-      - "traefik.http.routers.watchtogether.tls.certresolver=${CERT_RESOLVER:-cloudflare}"
-      - "traefik.http.routers.watchtogether.service=watchtogether"
     depends_on:
       - backend
     networks:

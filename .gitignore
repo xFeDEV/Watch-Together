@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+backend/venv/
+
+# Build outputs
+frontend/dist/
+*.egg-info/
+__pycache__/
+*.pyc
+
+# Environment & IDE
+.env
+.env.local
+.vscode/
+.idea/
+.DS_Store
+
+# Docker logs & temp
+*.log

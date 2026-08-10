@@ -153,6 +153,19 @@ export function useSyncPlayer({ role, videoRef, sendMediaControl }: UseSyncPlaye
     const onLoadedMetadata = () => {
       setDuration(video.duration);
       setFormatError(null);
+      // Force initial frame paint on GPU decoder
+      try {
+        if (video.currentTime === 0) {
+          video.currentTime = 0.001;
+        }
+      } catch (e) {}
+
+      // Check if video track failed to decode (0x0 dimensions despite having duration)
+      setTimeout(() => {
+        if (video && video.videoWidth === 0 && video.videoHeight === 0 && video.duration > 0) {
+          setFormatError('El navegador detectó la duración del archivo, pero no puede decodificar la imagen del video. Esto ocurre habitualmente con archivos MKV, H.265/HEVC o audios Dolby AC3. Por favor, prueba con un video en formato MP4 (H.264 / AAC) o WebM.');
+        }
+      }, 500);
     };
 
     const onError = () => {

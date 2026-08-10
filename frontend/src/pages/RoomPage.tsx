@@ -106,6 +106,12 @@ export const RoomPage: React.FC = () => {
     // Extract stream using captureStream once metadata is ready
     videoRef.current.onloadedmetadata = () => {
       if (videoRef.current) {
+        try {
+          if (videoRef.current.currentTime === 0) {
+            videoRef.current.currentTime = 0.001;
+          }
+        } catch (e) {}
+
         const videoEl = videoRef.current as any;
         const stream: MediaStream = videoEl.captureStream
           ? videoEl.captureStream()

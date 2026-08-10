@@ -6,24 +6,38 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: watchtogether-backend
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+    restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
-    restart: unless-stopped
+    networks:
+      - watchtogether_net
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: watchtogether-frontend
-    ports:
-      - "${FRONTEND_PORT:-5173}:80"
+    restart: unless-stopped
     environment:
       - VITE_STUN_SERVER=${VITE_STUN_SERVER:-stun:stun.l.google.com:19302}
       - VITE_TURN_SERVER=${VITE_TURN_SERVER}
       - VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
       - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.watchtogether.loadbalancer.server.port=80"
+      - "traefik.http.routers.watchtogether.rule=Host(`${DOMAIN:-watchtogether.feexel.tech}`)"
+      - "traefik.http.routers.watchtogether.entrypoints=websecure"
+      - "traefik.http.routers.watchtogether.tls.certresolver=${CERT_RESOLVER:-cloudflare}"
+      - "traefik.http.routers.watchtogether.service=watchtogether"
     depends_on:
       - backend
-    restart: unless-stopped
+    networks:
+      - watchtogether_net
+      - proxy_network
+
+networks:
+  watchtogether_net:
+    driver: bridge
+  proxy_network:
+    external: true

@@ -64,9 +64,21 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
         setUploading(false);
         try {
           const res = JSON.parse(xhr.responseText);
-          setError(res.detail || 'Error al subir la película');
+          const detailMsg = typeof res.detail === 'string'
+            ? res.detail
+            : Array.isArray(res.detail)
+            ? res.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ')
+            : JSON.stringify(res.detail);
+
+          setError(detailMsg || `Error al subir la película (HTTP ${xhr.status})`);
         } catch {
-          setError('Error al conectar con el servidor');
+          if (xhr.status === 413) {
+            setError('El archivo es demasiado grande para la configuración del servidor.');
+          } else if (xhr.status === 504 || xhr.status === 502) {
+            setError('Tiempo de espera agotado al conectar con el servidor.');
+          } else {
+            setError(`Error al conectar con el servidor (HTTP ${xhr.status})`);
+          }
         }
       }
     });

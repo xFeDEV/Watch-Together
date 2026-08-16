@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="play" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="100" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="210" stroke="#334155" stroke-width="8" fill="none"/>
+  <!-- Play YouTube Symbol -->
+  <path d="M 180 140 L 360 256 L 180 372 Z" fill="url(#play)"/>
+  <!-- Download Arrow Overlay -->
+  <path d="M 330 260 L 330 380 L 270 380 L 360 470 L 450 380 L 390 380 L 390 260 Z" fill="url(#arrow)" opacity="0.95"/>
+</svg>

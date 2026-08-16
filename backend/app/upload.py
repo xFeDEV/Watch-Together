@@ -18,12 +18,24 @@ active_uploads: Dict[str, Dict[str, Any]] = {}
 
 UPLOAD_SECRET_TOKEN = os.getenv("UPLOAD_SECRET_TOKEN", "")
 
-ALLOWED_EXTENSIONS = {".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v"}
+ALLOWED_EXTENSIONS = {
+    ".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v",
+    ".flv", ".ts", ".m2ts", ".wmv", ".3gp", ".mpg", ".mpeg"
+}
 
 def sanitize_filename(filename: str) -> str:
-    # Strip dangerous characters to prevent path traversal
-    clean_name = os.path.basename(filename)
-    return "".join(c for c in clean_name if c.isalnum() or c in "._- ")
+    clean_name = os.path.basename(filename or "video.mp4")
+    # Separate extension first to prevent dot issues
+    base, ext = os.path.splitext(clean_name)
+    if not ext and "." in clean_name and not clean_name.startswith("."):
+        parts = clean_name.rsplit(".", 1)
+        base, ext = parts[0], f".{parts[1]}"
+
+    # Allow alphanumeric, spaces, hyphens, underscores, dots, brackets, parentheses, Spanish accents
+    safe_base = "".join(c for c in base if c.isalnum() or c in " ._-()[]áéíóúñÁÉÍÓÚÑ")
+    if not safe_base.strip():
+        safe_base = "video"
+    return f"{safe_base}{ext.lower()}"
 
 @router.post("/upload")
 async def upload_temporary_media(
@@ -41,7 +53,7 @@ async def upload_temporary_media(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Format '{ext}' not allowed. Allowed formats: {', '.join(ALLOWED_EXTENSIONS)}"
+            detail=f"Formato '{ext}' no permitido. Formatos permitidos: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
         )
 
     upload_id = str(uuid.uuid4())[:8]

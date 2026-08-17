@@ -17,7 +17,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
   const [speedMBps, setSpeedMBps] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -26,7 +26,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     }
   };
 
-  const handleStartUpload = () => {
+  const handleStartUpload = async () => {
     if (!selectedFile) return;
 
     setUploading(true);
@@ -35,73 +35,101 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     setTransferredBytes(0);
 
     const apiHost = window.location.port === '5173' ? 'http://localhost:8000' : '';
-    const xhr = new XMLHttpRequest();
-    xhrRef.current = xhr;
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks to avoid proxy timeouts
+    const totalSize = selectedFile.size;
+    const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
 
     const startTime = Date.now();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        const percent = Math.round((e.loaded / e.total) * 100);
-        setProgressPercent(percent);
-        setTransferredBytes(e.loaded);
+    try {
+      // 1. Initialize Chunked Upload Session
+      const initRes = await fetch(`${apiHost}/api/upload/init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: selectedFile.name,
+          total_size: totalSize,
+          chunk_size: CHUNK_SIZE,
+        }),
+        signal: abortController.signal,
+      });
 
-        const elapsedSec = max(0.1, (Date.now() - startTime) / 1000);
-        const speed = (e.loaded / elapsedSec) / (1024 * 1024);
-        setSpeedMBps(parseFloat(speed.toFixed(2)));
+      if (!initRes.ok) {
+        const errorData = await initRes.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Error al iniciar la sesión de subida');
       }
-    });
 
-    xhr.addEventListener('load', () => {
-      if (xhr.status === 200) {
-        setUploading(false);
-        onUploadCompleted();
-        onClose();
-      } else {
-        setUploading(false);
-        try {
-          const res = JSON.parse(xhr.responseText);
-          const detailMsg = typeof res.detail === 'string'
-            ? res.detail
-            : Array.isArray(res.detail)
-            ? res.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ')
-            : JSON.stringify(res.detail);
+      const { upload_id } = await initRes.json();
+      let bytesUploaded = 0;
 
-          setError(detailMsg || `Error al subir la película (HTTP ${xhr.status})`);
-        } catch {
-          if (xhr.status === 413) {
-            setError('El archivo es demasiado grande para la configuración del servidor.');
-          } else if (xhr.status === 504 || xhr.status === 502) {
-            setError('Error de procesamiento. Reintenta la subida.');
-          } else {
-            setError(`Error al conectar con el servidor (HTTP ${xhr.status})`);
+      // 2. Upload chunks sequentially
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        if (abortController.signal.aborted) return;
+
+        const start = chunkIndex * CHUNK_SIZE;
+        const end = Math.min(totalSize, start + CHUNK_SIZE);
+        const chunkBlob = selectedFile.slice(start, end);
+
+        let attempts = 0;
+        let success = false;
+
+        while (attempts < 3 && !success && !abortController.signal.aborted) {
+          try {
+            attempts++;
+            const chunkRes = await fetch(`${apiHost}/api/upload/chunk`, {
+              method: 'POST',
+              headers: {
+                'X-Upload-Id': upload_id,
+                'X-Chunk-Index': chunkIndex.toString(),
+                'Content-Type': 'application/octet-stream',
+              },
+              body: chunkBlob,
+              signal: abortController.signal,
+            });
+
+            if (chunkRes.ok) {
+              success = true;
+              bytesUploaded += chunkBlob.size;
+              setTransferredBytes(bytesUploaded);
+
+              const percent = Math.round((bytesUploaded / totalSize) * 100);
+              setProgressPercent(percent);
+
+              const elapsedSec = Math.max(0.1, (Date.now() - startTime) / 1000);
+              const speed = (bytesUploaded / elapsedSec) / (1024 * 1024);
+              setSpeedMBps(parseFloat(speed.toFixed(2)));
+            } else {
+              if (attempts >= 3) {
+                const errDetail = await chunkRes.json().catch(() => ({}));
+                throw new Error(errDetail.detail || `Error al subir bloque ${chunkIndex + 1}`);
+              }
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+          } catch (err: any) {
+            if (abortController.signal.aborted) return;
+            if (attempts >= 3) throw err;
+            await new Promise((r) => setTimeout(r, 1000));
           }
         }
       }
-    });
 
-    xhr.timeout = 86400000; // 24 hours in ms
-
-    xhr.addEventListener('error', () => {
       setUploading(false);
-      setError('Error de red al subir el archivo. Revisa tu conexión a internet.');
-    });
-
-    xhr.addEventListener('timeout', () => {
+      onUploadCompleted();
+      onClose();
+    } catch (err: any) {
+      if (abortController.signal.aborted) return;
       setUploading(false);
-      setError('Tiempo de espera agotado al enviar el archivo.');
-    });
-
-    xhr.open('POST', `${apiHost}/api/upload`);
-    xhr.setRequestHeader('X-Filename', encodeURIComponent(selectedFile.name));
-    xhr.setRequestHeader('Content-Type', selectedFile.type || 'application/octet-stream');
-    xhr.send(selectedFile);
+      setError(err.message || 'Error de conexión al subir la película');
+    }
   };
 
   const cancelUpload = () => {
-    if (xhrRef.current && uploading) {
-      xhrRef.current.abort();
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
+    setUploading(false);
     onClose();
   };
 
@@ -110,10 +138,6 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
-
-  function max(a: number, b: number): number {
-    return a > b ? a : b;
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
@@ -125,7 +149,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
             </div>
             <div>
               <h3 className="text-xl font-bold text-white">Subir película temporal</h3>
-              <p className="text-xs text-gray-400">Se eliminará automáticamente a las 24 horas</p>
+              <p className="text-xs text-gray-400">Subida por bloques resiliente · Expira a las 24h</p>
             </div>
           </div>
 

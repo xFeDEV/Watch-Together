@@ -83,9 +83,16 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       }
     });
 
+    xhr.timeout = 86400000; // 24 hours in ms
+
     xhr.addEventListener('error', () => {
       setUploading(false);
-      setError('Error de red al subir el archivo');
+      setError('Error de red al subir el archivo. Revisa tu conexión a internet.');
+    });
+
+    xhr.addEventListener('timeout', () => {
+      setUploading(false);
+      setError('Tiempo de espera agotado al enviar el archivo.');
     });
 
     xhr.open('POST', `${apiHost}/api/upload`);

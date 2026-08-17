@@ -34,9 +34,6 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     setProgressPercent(0);
     setTransferredBytes(0);
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
     const apiHost = window.location.port === '5173' ? 'http://localhost:8000' : '';
     const xhr = new XMLHttpRequest();
     xhrRef.current = xhr;
@@ -75,7 +72,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
           if (xhr.status === 413) {
             setError('El archivo es demasiado grande para la configuración del servidor.');
           } else if (xhr.status === 504 || xhr.status === 502) {
-            setError('Tiempo de espera agotado al conectar con el servidor.');
+            setError('Error de procesamiento. Reintenta la subida.');
           } else {
             setError(`Error al conectar con el servidor (HTTP ${xhr.status})`);
           }
@@ -96,7 +93,9 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     });
 
     xhr.open('POST', `${apiHost}/api/upload`);
-    xhr.send(formData);
+    xhr.setRequestHeader('X-Filename', encodeURIComponent(selectedFile.name));
+    xhr.setRequestHeader('Content-Type', selectedFile.type || 'application/octet-stream');
+    xhr.send(selectedFile);
   };
 
   const cancelUpload = () => {

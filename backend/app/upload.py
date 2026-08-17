@@ -2,9 +2,9 @@ import os
 import uuid
 import time
 import logging
+from urllib.parse import unquote
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, UploadFile, File, Header, HTTPException, status, BackgroundTasks
-from pydantic import BaseModel
+from fastapi import APIRouter, Request, UploadFile, File, Header, HTTPException, status, BackgroundTasks
 
 from app.cleanup import get_media_dir, create_sidecar_metadata
 from app.jellyfin import refresh_media_path
@@ -39,15 +39,36 @@ def sanitize_filename(filename: str) -> str:
 
 @router.post("/upload")
 async def upload_temporary_media(
+    request: Request,
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
+    x_filename: Optional[str] = Header(None),
     x_upload_secret: Optional[str] = Header(None)
 ):
     # Optional authorization check if secret token is configured
     if UPLOAD_SECRET_TOKEN and x_upload_secret != UPLOAD_SECRET_TOKEN:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid upload authorization token")
 
-    original_filename = sanitize_filename(file.filename or "video.mp4")
+    # Determine filename from X-Filename header or form data
+    raw_name = ""
+    file_obj: Optional[UploadFile] = None
+
+    if x_filename:
+        raw_name = unquote(x_filename)
+    else:
+        # Fallback to form parsing for legacy requests
+        try:
+            form = await request.form()
+            file_item = form.get("file")
+            if file_item and hasattr(file_item, "filename"):
+                file_obj = file_item
+                raw_name = file_item.filename or "video.mp4"
+        except Exception:
+            pass
+
+    if not raw_name:
+        raise HTTPException(status_code=400, detail="No valid file or X-Filename header provided")
+
+    original_filename = sanitize_filename(raw_name)
     ext = os.path.splitext(original_filename)[1].lower()
 
     if ext not in ALLOWED_EXTENSIONS:
@@ -73,22 +94,33 @@ async def upload_temporary_media(
         "start_time": time.time()
     }
 
-    CHUNK_SIZE = 1024 * 1024  # 1MB buffer
     total_bytes = 0
 
     try:
+        start_time = time.time()
         with open(file_path, "wb") as buffer:
-            start_time = time.time()
-            while chunk := await file.read(CHUNK_SIZE):
-                buffer.write(chunk)
-                total_bytes += len(chunk)
+            if x_filename:
+                # Direct HTTP request body streaming: instant start, 0MB buffer, no proxy timeout
+                async for chunk in request.stream():
+                    buffer.write(chunk)
+                    total_bytes += len(chunk)
 
-                elapsed = max(0.1, time.time() - start_time)
-                speed_bytes_sec = total_bytes / elapsed
-                speed_mbps = (speed_bytes_sec * 8) / (1024 * 1024)
+                    elapsed = max(0.1, time.time() - start_time)
+                    speed_mbps = ((total_bytes / elapsed) * 8) / (1024 * 1024)
 
-                active_uploads[upload_id]["bytes_received"] = total_bytes
-                active_uploads[upload_id]["speed_mbps"] = round(speed_mbps, 2)
+                    active_uploads[upload_id]["bytes_received"] = total_bytes
+                    active_uploads[upload_id]["speed_mbps"] = round(speed_mbps, 2)
+            elif file_obj:
+                CHUNK_SIZE = 1024 * 1024
+                while chunk := await file_obj.read(CHUNK_SIZE):
+                    buffer.write(chunk)
+                    total_bytes += len(chunk)
+
+                    elapsed = max(0.1, time.time() - start_time)
+                    speed_mbps = ((total_bytes / elapsed) * 8) / (1024 * 1024)
+
+                    active_uploads[upload_id]["bytes_received"] = total_bytes
+                    active_uploads[upload_id]["speed_mbps"] = round(speed_mbps, 2)
 
         # Create sidecar JSON metadata (24h retention)
         metadata = create_sidecar_metadata(
@@ -119,9 +151,6 @@ async def upload_temporary_media(
         if os.path.exists(file_path):
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-    finally:
-        # Keep upload status record for 10 minutes then clean up memory
-        pass
 
 @router.get("/upload/progress/{upload_id}")
 def get_upload_progress(upload_id: str):
